@@ -6,10 +6,12 @@ class PixelPar:
         self.weight = np.zeros(size)
         self.miu = np.zeros(shape=size, dtype=np.uint8)
         self.sigma = np.zeros(size)
+        self.nGM = np.ones(shape=size, dtype=np.uint8)
 
 
-def updateBackGround(background, frame):
+def updateBackGround(background, frame, PAR):
     [w, h] = frame.shape
+
 
 
 def InitialPars(frame, PAR):
