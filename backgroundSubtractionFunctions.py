@@ -8,12 +8,12 @@ class PixelPar:
         size = list(size)
         k = 0.5
         [h, w, chn] = size
-        self.weight = np.array([[[[1 / 3] * 3] * w] * h] * chn)
-        self.miu = np.array([[[[0] * 3] * w] * h] * chn)
-        self.sigma = np.array([[[[1] * 3] * w] * h] * chn)
-        self.N = np.array([[[[1] * 3] * w] * h] * chn)
-        self.M = np.array([[[[1] * 3] * w] * h] * chn)
-        self.Z = np.array([[[[1] * 3] * w] * h] * chn)
+        self.weight = np.array([[[[1 / 3] * 3] * w] * h] * chn, dtype=np.float32)
+        self.miu = np.array([[[[128] * 3] * w] * h] * chn, dtype=np.float32)
+        self.sigma = np.array([[[[5] * 3] * w] * h] * chn, dtype=np.float32)
+        self.N = np.array([[[[1] * 3] * w] * h] * chn, dtype=np.float32)
+        self.M = np.array([[[[1] * 3] * w] * h] * chn, dtype=np.float32)
+        self.Z = np.array([[[[1] * 3] * w] * h] * chn, dtype=np.float32)
         self.nGM = np.array([[[3] * w] * h] * chn)
 
     def ShowPar(self, x, y, chn):
@@ -65,16 +65,21 @@ def updateBackGround(BG, frame, FrameInNdarray, PAR, ControlPar='控制参数暂
     UpBasedOnNowBG = 0
     UpWithoutNowBG = 1 - UpBasedOnNowBG
     """Imported Values"""
-    [h, w] = frame[0].shape  # Get the shape
-    [B, G, R] = frame[0:3]  # Get the Color Frame
-    S = frame[3]  # Get the light strength map
+    # [h, w] = frame[0].shape  # Get the shape
+    # [B, G, R] = frame[0:3]  # Get the Color Frame
+    # S = frame[3]  # Get the light strength map
     # Get the colored background[BG_B, BG_G, BG_R, BG_flag]
     # ,and a matrix BG_flag as the indicator of Background Place
-    [BG_B, BG_G, BG_R, BG_flag] = BG
     [weight, miu, sigma, N, M, Z] = [PAR.weight, PAR.miu, PAR.sigma, PAR.N, PAR.M, PAR.Z]
     """Calculate P(L_t|I(x, y, t), @theta)"""
-    P = weight / (np.sqrt(2 * math.pi) * sigma) * np.exp(
-        -1 * (FrameInNdarray - miu) * (FrameInNdarray - miu) / 2 / (sigma * sigma))
+    P1 = weight / np.sqrt(2 * math.pi)
+    P2 = P1 / sigma
+    P3 = FrameInNdarray - miu
+    P4 = P3 * P3
+    P5 = -1 * P4 / 2
+    P6 = P5/(sigma * sigma)
+    P7 = np.exp(P6)
+    P = P2 * P7
     N = N + P
     M = M + P * FrameInNdarray
     Z = Z + P * FrameInNdarray * FrameInNdarray
@@ -85,7 +90,12 @@ def updateBackGround(BG, frame, FrameInNdarray, PAR, ControlPar='控制参数暂
     weight = N / sumN
     miu = M / N
     sigma = Z / N - miu * miu
-
+    [PAR.weight, PAR.miu, PAR.sigma, PAR.N, PAR.M, PAR.Z] = [weight, miu, sigma, N, M, Z]
+    BG_B = PAR.miu[0, :, :, 0]
+    BG_G = PAR.miu[1, :, :, 0]
+    BG_R = PAR.miu[2, :, :, 0]
+    GrayBG = PAR.miu[3, :, :, 0]
+    BG[0:4] = [BG_B, BG_G, BG_R, GrayBG]
     """Update Part"""
     """
     for j in range(h):
@@ -104,7 +114,11 @@ def InitialPars(frame, PAR):
     for i in range(chn):
         sample = frame[:, :, i, :]
         PAR.miu[i, :, :, 0] = np.mean(sample, 2)
-        PAR.sigma[i, :, :, 0] = np.var(sample, axis=2)
+        temp = np.std(sample, axis=2, dtype=np.float32)
+        temp = np.where(temp != 0, temp, 0.5)
+        # PAR.sigma[i, :, :, 0] = np.std(sample, axis=2,dtype=np.float32)
+        PAR.sigma[i, :, :, 0] = np.std(sample, axis=2, dtype=np.float32)
+        PAR.sigma[i, :, :, 0] = np.where(PAR.sigma[i, :, :, 0] != 0, PAR.sigma[i, :, :, 0], 0.5)
         PAR.M[i, :, :, :] = PAR.N[i, :, :, :] * PAR.miu[i, :, :, :]
         PAR.Z[i, :, :, :] = PAR.N[i, :, :, :] * (PAR.sigma[i, :, :, :] + PAR.miu[i, :, :, :] * PAR.miu[i, :, :, :])
     print("全图参数初始化完毕")
